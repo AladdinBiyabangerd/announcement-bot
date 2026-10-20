@@ -5,6 +5,11 @@ import { buildSearchUrl as tapUrl } from "../src/scrape/tap.js";
 import { buildSearchUrl as ev10Url } from "../src/scrape/ev10.js";
 import { buildSearchUrl as yeniemlakUrl } from "../src/scrape/yeniemlak.js";
 import { buildSearchUrl as emlakUrl } from "../src/scrape/emlak.js";
+import { buildSearchUrl as arendaUrl } from "../src/scrape/arenda.js";
+import { buildSearchUrl as evvUrl } from "../src/scrape/evv.js";
+import { buildSearchUrl as unvanUrl } from "../src/scrape/unvan.js";
+import { buildSearchUrl as lalafoUrl } from "../src/scrape/lalafo.js";
+import { buildSearchUrl as binatapUrl } from "../src/scrape/binatap.js";
 
 const landBaku = {
   propertyType: "LAND",
@@ -31,7 +36,7 @@ test("bina builds nationwide URL when city is skipped", () => {
     cityName: null,
     maxPrice: 150_000,
   });
-  assert.match(url, /\/alqi-satqi\/menzil/);
+  assert.match(url, /\/alqi-satqi\/heyet-evleri/);
   assert.equal(url.includes("/baki/"), false);
   assert.match(url, /price_to=150000/);
 });
@@ -70,4 +75,48 @@ test("emlak builds valid search URL", () => {
   assert.match(url, /space_min=3/);
   assert.match(url, /price_max=10000/);
   assert.equal(url.includes("ann_type=1"), false);
+});
+
+test("bina house URL uses heyet-evleri not menzil", () => {
+  const url = binaUrl({
+    propertyType: "HOUSE",
+    cityId: 1,
+    cityName: "Bakı",
+    maxPrice: 150000,
+  });
+  assert.match(url, /\/baki\/alqi-satqi\/heyet-evleri/);
+  assert.equal(url.includes("/menzil"), false);
+});
+
+test("arenda house and land SEO paths", () => {
+  assert.match(arendaUrl({ propertyType: "HOUSE" }), /\/heyet-evi-satilir\/$/);
+  assert.match(arendaUrl({ propertyType: "LAND" }), /\/torpaq-satilir\/$/);
+});
+
+test("evv uses city heyet-evi path and nationwide axtaris", () => {
+  const baku = evvUrl({ propertyType: "HOUSE", cityId: 1, cityName: "Bakı" });
+  assert.match(baku, /\/emlak\/baki\/satilir\/heyet-evi/);
+  const land = evvUrl({ propertyType: "LAND", cityId: 1, cityName: "Bakı" });
+  assert.match(land, /\/emlak\/baki\/satilir\/torpaq/);
+  const nationwide = evvUrl({ propertyType: "HOUSE", cityId: null, cityName: null });
+  assert.match(nationwide, /\/axtaris\?/);
+  assert.match(nationwide, /category=3/);
+  assert.match(nationwide, /type=1/);
+});
+
+test("unvan uses dedicated property sections", () => {
+  assert.match(unvanUrl({ propertyType: "HOUSE" }), /\/heyet-evi-villa$/);
+  assert.match(unvanUrl({ propertyType: "LAND" }), /\/torpaq-sahesi$/);
+});
+
+test("lalafo uses house and land category paths", () => {
+  assert.match(lalafoUrl({ propertyType: "HOUSE" }), /\/azerbaijan\/doma-i-dachi$/);
+  assert.match(lalafoUrl({ propertyType: "LAND" }), /\/azerbaijan\/zemelnye-uchastki$/);
+});
+
+test("binatap uses heyet-evleri and torpaq sale paths", () => {
+  const house = binatapUrl({ propertyType: "HOUSE", cityId: 1, cityName: "Bakı" });
+  assert.match(house, /\/baki\/alqi-satqi\/heyet-evleri$/);
+  const land = binatapUrl({ propertyType: "LAND", cityId: null, cityName: null });
+  assert.match(land, /\/alqi-satqi\/torpaq$/);
 });

@@ -1,12 +1,13 @@
 import * as cheerio from "cheerio";
 import { SOURCES } from "../data/sources.js";
 import { binaCitySlug } from "./citySlugs.js";
+import { listing } from "./listing.js";
+import { fetchPaginatedListings } from "./paginate.js";
 import { firstNonBlank, parsePriceFromText, parseSot, buildQuery } from "./textParser.js";
-import { fetchHtml } from "./http.js";
 import { config } from "../config.js";
 
-const ROOM_PATTERN = /(\d+)\s*otaq/iu;
-const SQM_PATTERN = /(\d+)\s*m²/iu;
+const ROOM_PATTERN = /(\d+)\s*\+?\s*otaq/iu;
+const SQM_PATTERN = /(\d+(?:[.,]\d+)?)\s*m\s*(?:²|2)/iu;
 
 function parseRooms(params, title) {
   for (const param of params) {
@@ -24,15 +25,19 @@ function parseSqm(params, title) {
     const lower = param.toLowerCase();
     const match = SQM_PATTERN.exec(lower);
     if (match && !lower.includes("sot")) {
-      return Number(match[1]);
+      return Math.round(Number(match[1].replace(",", ".")));
     }
   }
   const lowerTitle = title.toLowerCase();
   const match = SQM_PATTERN.exec(lowerTitle);
   if (match && !lowerTitle.includes("sot")) {
-    return Number(match[1]);
+    return Math.round(Number(match[1].replace(",", ".")));
   }
   return null;
+}
+
+function categorySlug(subscription) {
+  return subscription.propertyType === "LAND" ? "torpaq" : "heyet-evleri";
 }
 
 function applyFilters(params, subscription) {
@@ -45,7 +50,6 @@ function applyFilters(params, subscription) {
     }
     return;
   }
-  params.push(["category_id", subscription.binaCategoryId]);
   if (subscription.cityId != null) {
     params.push(["city_id", subscription.cityId]);
   }
@@ -67,21 +71,23 @@ function applyFilters(params, subscription) {
   }
 }
 
-export function buildSeoPath(subscription) {
-  const categorySlug = subscription.propertyType === "LAND" ? "torpaq" : "menzil";
+export function buildSeoPath(subscription, page = 1) {
   const params = [];
   applyFilters(params, subscription);
-  const hasCity = subscription.cityId != null || Boolean(subscription.cityName?.trim());
-  if (hasCity) {
-    const citySlug = binaCitySlug(subscription.cityId, subscription.cityName);
-    return `${SOURCES.BINA_AZ.baseUrl}/${citySlug}/alqi-satqi/${categorySlug}?${buildQuery(params)}`;
+  if (page > 1) {
+    params.push(["page", page]);
   }
-  return `${SOURCES.BINA_AZ.baseUrl}/alqi-satqi/${categorySlug}?${buildQuery(params)}`;
+  const query = buildQuery(params);
+  const hasCity = subscription.cityId != null || Boolean(subscription.cityName?.trim());
+  const path = hasCity
+    ? `${SOURCES.BINA_AZ.baseUrl}/${binaCitySlug(subscription.cityId, subscription.cityName)}/alqi-satqi/${categorySlug(subscription)}`
+    : `${SOURCES.BINA_AZ.baseUrl}/alqi-satqi/${categorySlug(subscription)}`;
+  return query ? `${path}?${query}` : path;
 }
 
-export function buildSearchUrl(subscription) {
+export function buildSearchUrl(subscription, page = 1) {
   if (subscription.propertyType) {
-    return buildSeoPath(subscription);
+    return buildSeoPath(subscription, page);
   }
   const params = [["leased", "false"]];
   const keywords = (subscription.keywords || "").trim();
@@ -89,50 +95,78 @@ export function buildSearchUrl(subscription) {
     params.push(["search_query", keywords]);
   }
   applyFilters(params, subscription);
+  if (page > 1) {
+    params.push(["page", page]);
+  }
   return `${SOURCES.BINA_AZ.baseUrl}/items?${buildQuery(params)}`;
+}
+
+function parseCard($, item) {
+  const el = $(item);
+  const externalId =
+    el.attr("data-item-id") ||
+    el.find("[data-item-id]").attr("data-item-id") ||
+    (el.find("a.item_link[href]").attr("href") || "").match(/\/items\/(\d+)/)?.[1];
+  if (!externalId) {
+    return null;
+  }
+  const image = el.find(".preview img[alt], img[alt]").first();
+  const title = image.length ? image.attr("alt") : `Elan #${externalId}`;
+  const params = el
+    .find(".card_params .name li, .name li, .card-params li")
+    .map((__, li) => $(li).text())
+    .get();
+  const region = el.find(".city_when, .location").first().text().trim() || null;
+  return listing({
+    source: SOURCES.BINA_AZ.name,
+    sourceLabel: SOURCES.BINA_AZ.label,
+    externalId,
+    title,
+    price: parsePriceFromText(el.find(".price-val, .price").first().text()),
+    currency: "AZN",
+    region,
+    url: `${SOURCES.BINA_AZ.baseUrl}/items/${externalId}`,
+    imageUrl: image.length ? firstNonBlank(image.attr("data-src"), image.attr("src")) : null,
+    publishedAt: null,
+    areaSqm: parseSqm(params, title),
+    landSot: parseSot(params, title),
+    roomCount: parseRooms(params, title),
+    country: "AZ",
+  });
 }
 
 export function parse(html) {
   const $ = cheerio.load(html);
-  const container = $("#js-items-search");
-  if (!container.length) {
-    return [];
-  }
   const listings = [];
-  container.find(".items-i[data-item-id]").each((_, item) => {
-    const el = $(item);
-    const externalId = el.attr("data-item-id");
-    if (!externalId) {
+  const cards = $("#js-items-search .items-i[data-item-id], .items_list .items-i[data-item-id], .items-i[data-item-id]");
+  cards.each((_, item) => {
+    const parsed = parseCard($, item);
+    if (parsed) {
+      listings.push(parsed);
+    }
+  });
+  if (listings.length > 0) {
+    return listings;
+  }
+  $("a.item_link[href*='/items/']").each((_, link) => {
+    const href = $(link).attr("href") || "";
+    const id = href.match(/\/items\/(\d+)/)?.[1];
+    if (!id || listings.some((row) => row.externalId === id)) {
       return;
     }
-    const image = el.find(".preview img[alt]").first();
-    const title = image.length ? image.attr("alt") : `Elan #${externalId}`;
-    const price = parsePriceFromText(el.find(".price-val").first().text());
-    const region = el.find(".city_when").first().text().trim() || null;
-    const params = el
-      .find(".card_params .name li")
-      .map((__, li) => $(li).text())
-      .get();
-    listings.push({
-      source: SOURCES.BINA_AZ.name,
-      sourceLabel: SOURCES.BINA_AZ.label,
-      externalId,
-      title,
-      price,
-      currency: "AZN",
-      region,
-      url: `${SOURCES.BINA_AZ.baseUrl}/items/${externalId}`,
-      imageUrl: image.length ? firstNonBlank(image.attr("data-src"), image.attr("src")) : null,
-      publishedAt: null,
-      areaSqm: parseSqm(params, title),
-      landSot: parseSot(params, title),
-      roomCount: parseRooms(params, title),
-    });
+    const parent = $(link).closest(".items-i, article, li");
+    const parsed = parseCard($, parent.length ? parent : $(link).parent());
+    if (parsed) {
+      listings.push(parsed);
+    }
   });
   return listings;
 }
 
 export async function fetchListings(subscription) {
-  const html = await fetchHtml(buildSearchUrl(subscription));
-  return parse(html).slice(0, config.scraper.maxResultsPerSource);
+  return fetchPaginatedListings({
+    buildPageUrl: (page) => buildSearchUrl(subscription, page),
+    parse,
+    max: config.scraper.maxResultsPerSource,
+  });
 }

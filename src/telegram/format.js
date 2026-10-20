@@ -50,6 +50,9 @@ function formatDetails(subscription) {
     parts.push(`${rooms} otaq`);
   }
   parts.push(formatPriceRange(subscription));
+  if (subscription.requireKupca) {
+    parts.push("kupça");
+  }
   return parts.join(" · ");
 }
 
@@ -78,6 +81,9 @@ export function formatConfirmationHtml(subscription) {
     lines.push("📍 Bütün şəhərlər");
   }
   lines.push(`💰 ${escapeHtml(formatPriceRange(subscription))}`);
+  if (subscription.requireKupca) {
+    lines.push("📜 Yalnız kupça (çıxarış)");
+  }
   lines.push("");
   lines.push(`🔎 ${escapeHtml(formatSourceLabels(subscription.sources))}`);
   lines.push("");
@@ -116,7 +122,7 @@ export function formatHelpHtml() {
   return [
     "🏠 <b>Əmlak axtarış botu</b>",
     "",
-    "Elanlar: bina.az · tap.az · ev10.az · yeniemlak.az · emlak.az",
+    "Elanlar: bina.az · tap.az · ev10.az · yeniemlak.az · emlak.az · arenda.az · evv.az · unvan.az · lalafo.az · binatap.az",
     "",
     "<b>Əmrlər</b>",
     "/start — yeni axtarış",
@@ -126,6 +132,6 @@ export function formatHelpHtml() {
     "/help — bu mesaj",
     "",
     "<b>Addımlar</b>",
-    "növ → sahə / otaq / şəhər <i>(opsional)</i> → qiymət",
+    "növ → sahə / otaq / şəhər <i>(opsional)</i> → kupça → qiymət",
   ].join("\n");
 }

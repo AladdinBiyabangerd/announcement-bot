@@ -9,6 +9,16 @@ export const SOURCES = {
     baseUrl: "https://yeniemlak.az",
   },
   EMLAK_AZ: { name: "EMLAK_AZ", alias: "emlak", label: "emlak.az", baseUrl: "https://emlak.az" },
+  ARENDA_AZ: { name: "ARENDA_AZ", alias: "arenda", label: "arenda.az", baseUrl: "https://arenda.az" },
+  EVV_AZ: { name: "EVV_AZ", alias: "evv", label: "evv.az", baseUrl: "https://www.evv.az" },
+  UNVAN_AZ: { name: "UNVAN_AZ", alias: "unvan", label: "unvan.az", baseUrl: "https://unvan.az" },
+  LALAFO_AZ: { name: "LALAFO_AZ", alias: "lalafo", label: "lalafo.az", baseUrl: "https://lalafo.az" },
+  BINATAP_AZ: {
+    name: "BINATAP_AZ",
+    alias: "binatap",
+    label: "binatap.az",
+    baseUrl: "https://binatap.az",
+  },
 };
 
 export const DEFAULT_SOURCE_ALIASES = Object.values(SOURCES)

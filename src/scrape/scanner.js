@@ -2,6 +2,8 @@ import { config } from "../config.js";
 import { parseSourceSet } from "../data/sources.js";
 import { matches } from "./matcher.js";
 import { SourceFetchError } from "./http.js";
+import { enrichKupcaIfNeeded } from "./enrich.js";
+import { isDomesticListing } from "./domestic.js";
 import { activeSubscriptions, findSubscriptionWithUser, isSeen, markSeen, pruneOldSeenListings } from "../store.js";
 import { formatListingMessage } from "../telegram/html.js";
 import { sendHtml } from "../telegram/client.js";
@@ -10,6 +12,11 @@ import * as tap from "./tap.js";
 import * as ev10 from "./ev10.js";
 import * as yeniemlak from "./yeniemlak.js";
 import * as emlak from "./emlak.js";
+import * as arenda from "./arenda.js";
+import * as evv from "./evv.js";
+import * as unvan from "./unvan.js";
+import * as lalafo from "./lalafo.js";
+import * as binatap from "./binatap.js";
 
 const FETCHERS = {
   BINA_AZ: bina.fetchListings,
@@ -17,6 +24,11 @@ const FETCHERS = {
   EV10_AZ: ev10.fetchListings,
   YENIEMLAK_AZ: yeniemlak.fetchListings,
   EMLAK_AZ: emlak.fetchListings,
+  ARENDA_AZ: arenda.fetchListings,
+  EVV_AZ: evv.fetchListings,
+  UNVAN_AZ: unvan.fetchListings,
+  LALAFO_AZ: lalafo.fetchListings,
+  BINATAP_AZ: binatap.fetchListings,
 };
 
 function sleep(ms) {
@@ -63,9 +75,13 @@ export async function processSubscription(db, subscription, sendNotifications = 
       let notified = 0;
       for (const listing of listings) {
         try {
-          if (await handleListing(db, active, listing, sendNotifications)) {
+          if (!isDomesticListing(listing)) {
+            continue;
+          }
+          const enriched = await enrichKupcaIfNeeded(listing, active);
+          if (await handleListing(db, active, enriched, sendNotifications)) {
             notified += 1;
-          } else if (matches(listing, active)) {
+          } else if (matches(enriched, active)) {
             matched += 1;
           }
         } catch (err) {

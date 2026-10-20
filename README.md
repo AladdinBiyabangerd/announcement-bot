@@ -2,7 +2,7 @@
 
 Java/Spring layihəsinin Node 22 portu. Mövcud `src/main/java` koduna toxunmur.
 
-Telegram əmlak axtarış botu: bina.az, tap.az, ev10.az, yeniemlak.az, emlak.az.
+Telegram əmlak axtarış botu: bina.az, tap.az, ev10.az, yeniemlak.az, emlak.az, arenda.az, evv.az, unvan.az, lalafo.az, binatap.az. Yalnız Azərbaycan elanları; kupça filtri detal səhifəsində yoxlanır (Bələdiyyə sənədi kupça sayılmır).
 
 ## Stack
 

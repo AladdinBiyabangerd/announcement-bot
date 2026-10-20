@@ -274,6 +274,24 @@ function promptPrice() {
   ].join("\n");
 }
 
+function promptKupca() {
+  return [
+    "📜 <b>Kupça</b>",
+    "Yalnız çıxarışı (kupçası) detal səhifəsində təsdiqlənən elanlar?",
+    "",
+    "<i>Bələdiyyə sənədi kupça sayılmır.</i>",
+  ].join("\n");
+}
+
+function kupcaKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: "📜  Yalnız kupça (çıxarış)", callback_data: "kupca:yes" }],
+      [{ text: "⏭  Fərq etməz", callback_data: "kupca:skip" }],
+    ],
+  };
+}
+
 async function confirmChoice(query, text, replyMarkup) {
   const messageId = query.message?.message_id;
   const chatId = query.message?.chat?.id;
@@ -295,6 +313,11 @@ async function askCity(db, chatId, draft) {
 async function askPrice(db, chatId, draft) {
   updateSession(db, chatId, "CHOOSE_PRICE", draft);
   await sendHtml(chatId, promptPrice(), { reply_markup: priceKeyboard() });
+}
+
+async function askKupca(db, chatId, draft) {
+  updateSession(db, chatId, "CHOOSE_KUPCA", draft);
+  await sendHtml(chatId, promptKupca(), { reply_markup: kupcaKeyboard() });
 }
 
 async function continueAfterPropertyType(db, chatId, draft, type) {
@@ -331,7 +354,7 @@ async function continueAfterCity(db, chatId, draft, city) {
     draft.cityId = null;
     draft.cityName = null;
   }
-  await askPrice(db, chatId, draft);
+  await askKupca(db, chatId, draft);
 }
 
 async function continueAfterLandSot(db, chatId, draft, landSot) {
@@ -429,6 +452,35 @@ async function handleCity(db, chatId, text, draft) {
     return;
   }
   await continueAfterCity(db, chatId, draft, city);
+}
+
+async function continueAfterKupca(db, chatId, draft, requireKupca) {
+  draft.requireKupca = Boolean(requireKupca);
+  await askPrice(db, chatId, draft);
+}
+
+async function handleKupca(db, chatId, text, draft) {
+  if (isSkipText(text)) {
+    await continueAfterKupca(db, chatId, draft, false);
+    return;
+  }
+  const choice = parsePositiveInt(text, 1, 2);
+  if (choice === 1) {
+    await continueAfterKupca(db, chatId, draft, true);
+    return;
+  }
+  if (choice === 2) {
+    await continueAfterKupca(db, chatId, draft, false);
+    return;
+  }
+  const normalized = text.trim().toLocaleLowerCase("az");
+  if (normalized === "kupça" || normalized === "kupca" || normalized === "beli" || normalized === "bəli") {
+    await continueAfterKupca(db, chatId, draft, true);
+    return;
+  }
+  await sendHtml(chatId, `${promptKupca()}\n\n⚠️ Düymədən seçin.`, {
+    reply_markup: kupcaKeyboard(),
+  });
 }
 
 async function applyPrice(db, chatId, draft, price) {
@@ -545,6 +597,19 @@ export async function handleFlowCallback(db, chatId, query) {
     return;
   }
 
+  if (kind === "kupca" && session.state === "CHOOSE_KUPCA") {
+    if (a === "skip") {
+      await confirmChoice(query, "📜 Kupça: <i>fərq etməz</i>");
+      await continueAfterKupca(db, chatId, draft, false);
+      return;
+    }
+    if (a === "yes") {
+      await confirmChoice(query, "📜 Kupça: <b>yalnız çıxarış</b>");
+      await continueAfterKupca(db, chatId, draft, true);
+    }
+    return;
+  }
+
   if (kind === "price" && session.state === "CHOOSE_PRICE") {
     const mode = PRICE_MODES[a];
     if (!mode) {
@@ -589,6 +654,9 @@ export async function handleStep(db, chatId, text) {
       break;
     case "CHOOSE_CITY":
       await handleCity(db, chatId, text, draft);
+      break;
+    case "CHOOSE_KUPCA":
+      await handleKupca(db, chatId, text, draft);
       break;
     case "CHOOSE_PRICE":
       await handlePrice(db, chatId, text, draft);

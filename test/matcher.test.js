@@ -10,11 +10,14 @@ function listing(title, price, extra = {}) {
     price,
     currency: "AZN",
     region: extra.region ?? "Bakı",
-    url: "https://tap.az/elanlar/1",
+    url: extra.url || "https://tap.az/elanlar/1",
     imageUrl: null,
     landSot: extra.landSot ?? null,
     areaSqm: extra.areaSqm ?? null,
     roomCount: extra.roomCount ?? null,
+    hasKupca: extra.hasKupca ?? null,
+    documentKind: extra.documentKind ?? null,
+    country: extra.country ?? "AZ",
   };
 }
 
@@ -59,6 +62,42 @@ test("house search rejects land", () => {
       roomCount: 3,
       cityName: "Bakı",
     }),
+    false,
+  );
+});
+
+test("rejects foreign listings even when other filters match", () => {
+  assert.equal(
+    matches(listing("Həyət evi İstanbul", 80_000, { region: "Türkiyə", roomCount: 3 }), {
+      propertyType: "HOUSE",
+      cityName: "Bakı",
+    }),
+    false,
+  );
+});
+
+test("kupça filter requires detail-verified hasKupca", () => {
+  const subscription = { propertyType: "HOUSE", cityName: "Bakı", requireKupca: true };
+  assert.equal(
+    matches(listing("Həyət evi 3 otaqlı", 80_000, { roomCount: 3 }), subscription),
+    false,
+  );
+  assert.equal(
+    matches(
+      listing("Həyət evi 3 otaqlı", 80_000, { roomCount: 3, hasKupca: true, documentKind: "kupca" }),
+      subscription,
+    ),
+    true,
+  );
+  assert.equal(
+    matches(
+      listing("Həyət evi 3 otaqlı", 80_000, {
+        roomCount: 3,
+        hasKupca: false,
+        documentKind: "belediye",
+      }),
+      subscription,
+    ),
     false,
   );
 });

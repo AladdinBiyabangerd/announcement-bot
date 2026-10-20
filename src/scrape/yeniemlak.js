@@ -1,8 +1,9 @@
 import * as cheerio from "cheerio";
 import { SOURCES } from "../data/sources.js";
 import { YENIEMLAK_CITY_BY_BINA } from "./citySlugs.js";
+import { listing } from "./listing.js";
+import { fetchPaginatedListings } from "./paginate.js";
 import { buildQuery, normalizeWhitespace, parsePriceText, parseRooms, parseSot } from "./textParser.js";
-import { fetchHtml } from "./http.js";
 import { config } from "../config.js";
 
 const LISTING_ID_PATTERN = /-([0-9]+)$/;
@@ -49,12 +50,12 @@ function parseYeniemlakSqm(params) {
   return null;
 }
 
-export function buildSearchUrl(subscription) {
+export function buildSearchUrl(subscription, page = 1) {
   const land = subscription.propertyType === "LAND";
   const house = subscription.propertyType === "HOUSE";
   const params = [
     ["elan_nov", "1"],
-    ["emlak", land ? "3" : "1"],
+    ["emlak", land ? "3" : "2"],
     ["menzil_nov", ""],
     ["qiymet", subscription.minPrice ?? ""],
     ["qiymet2", subscription.maxPrice ?? ""],
@@ -70,6 +71,9 @@ export function buildSearchUrl(subscription) {
   const city = YENIEMLAK_CITY_BY_BINA[subscription.cityId];
   if (city) {
     params.push(["seher[]", city]);
+  }
+  if (page > 1) {
+    params.push(["page", page]);
   }
   return `${SOURCES.YENIEMLAK_AZ.baseUrl}/elan/axtar?${buildQuery(params)}`;
 }
@@ -98,26 +102,32 @@ export function parse(html) {
           .get()
       : [];
     const image = el.find("img[src]").first();
-    listings.push({
-      source: SOURCES.YENIEMLAK_AZ.name,
-      sourceLabel: SOURCES.YENIEMLAK_AZ.label,
-      externalId,
-      title,
-      price,
-      currency: "AZN",
-      region: buildRegion(textCell, $),
-      url: `${SOURCES.YENIEMLAK_AZ.baseUrl}${slug}`,
-      imageUrl: image.length ? `${SOURCES.YENIEMLAK_AZ.baseUrl}${image.attr("src")}` : null,
-      publishedAt: null,
-      areaSqm: parseYeniemlakSqm(params),
-      landSot: parseSot(params, title),
-      roomCount: parseRooms(params, title),
-    });
+    listings.push(
+      listing({
+        source: SOURCES.YENIEMLAK_AZ.name,
+        sourceLabel: SOURCES.YENIEMLAK_AZ.label,
+        externalId,
+        title,
+        price,
+        currency: "AZN",
+        region: buildRegion(textCell, $),
+        url: `${SOURCES.YENIEMLAK_AZ.baseUrl}${slug}`,
+        imageUrl: image.length ? `${SOURCES.YENIEMLAK_AZ.baseUrl}${image.attr("src")}` : null,
+        publishedAt: null,
+        areaSqm: parseYeniemlakSqm(params),
+        landSot: parseSot(params, title),
+        roomCount: parseRooms(params, title),
+        country: "AZ",
+      }),
+    );
   });
   return listings;
 }
 
 export async function fetchListings(subscription) {
-  const html = await fetchHtml(buildSearchUrl(subscription));
-  return parse(html).slice(0, config.scraper.maxResultsPerSource);
+  return fetchPaginatedListings({
+    buildPageUrl: (page) => buildSearchUrl(subscription, page),
+    parse,
+    max: config.scraper.maxResultsPerSource,
+  });
 }

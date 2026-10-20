@@ -1,5 +1,6 @@
 import { parseSotDecimal } from "./textParser.js";
 import { detectKind, isHouse, isLand } from "./propertyKind.js";
+import { isDomesticListing } from "./domestic.js";
 
 function keywordList(subscription) {
   if (!subscription.keywords || !subscription.keywords.trim()) {
@@ -125,7 +126,24 @@ function matchesLegacyListing(listing, subscription) {
   return matchesCityName(listing, subscription);
 }
 
+function matchesDomestic(listing) {
+  return isDomesticListing(listing);
+}
+
+function matchesKupca(listing, subscription) {
+  if (!subscription.requireKupca) {
+    return true;
+  }
+  return listing.hasKupca === true && listing.documentKind !== "belediye";
+}
+
 export function matches(listing, subscription) {
+  if (!matchesDomestic(listing)) {
+    return false;
+  }
+  if (!matchesKupca(listing, subscription)) {
+    return false;
+  }
   if (isPropertySearch(subscription)) {
     return matchesPropertyListing(listing, subscription);
   }

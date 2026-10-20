@@ -90,4 +90,7 @@ test("formatHelpHtml includes commands", () => {
   assert.match(html, /\/start/);
   assert.match(html, /\/list/);
   assert.match(html, /opsional/);
+  assert.match(html, /arenda\.az/);
+  assert.match(html, /binatap\.az/);
+  assert.match(html, /kupça/);
 });

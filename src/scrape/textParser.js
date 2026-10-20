@@ -1,8 +1,8 @@
-const PRICE_PATTERN = /[\d\s]+/;
-const ROOM_PATTERN = /(\d+)\s*otaq/iu;
-const SQM_PATTERN = /(\d+)\s*m²/iu;
+const PRICE_PATTERN = /\d[\d\u00a0., ]*/;
+const ROOM_PATTERN = /(\d+)\s*\+?\s*otaq/iu;
+const SQM_PATTERN = /(\d+(?:[.,]\d+)?)\s*m\s*(?:²|2)/iu;
 const SOT_PATTERN = /(\d+(?:[.,]\d+)?)\s*sot/iu;
-const PRICE_AZN_PATTERN = /([\d\s.,]+)\s*AZN/iu;
+const PRICE_AZN_PATTERN = /([\d\u00a0., ]+)\s*AZN/iu;
 
 function firstMatch(regex, text) {
   const match = regex.exec(text);
@@ -20,18 +20,26 @@ export function parseRooms(params, title) {
   return fromTitle ? Number(fromTitle) : null;
 }
 
+function toInt(value) {
+  if (value == null) {
+    return null;
+  }
+  const number = Number(String(value).replace(",", "."));
+  return Number.isFinite(number) ? Math.round(number) : null;
+}
+
 export function parseSqm(params, title) {
   for (const param of params) {
     const lower = param.toLowerCase();
     const value = firstMatch(SQM_PATTERN, lower);
     if (value && !lower.includes("sot")) {
-      return Number(value);
+      return toInt(value);
     }
   }
   const lowerTitle = title.toLowerCase();
   const fromTitle = firstMatch(SQM_PATTERN, lowerTitle);
   if (fromTitle && !lowerTitle.includes("sot")) {
-    return Number(fromTitle);
+    return toInt(fromTitle);
   }
   return null;
 }
@@ -52,35 +60,41 @@ export function parseSot(params, title) {
   return value == null ? null : Math.round(value);
 }
 
+function digitsToNumber(raw) {
+  const compact = String(raw || "")
+    .replace(/[\s\u00a0]/g, "")
+    .replace(/,(?=\d{3}\b)/g, "")
+    .replace(/\.(?=\d{3}\b)/g, "")
+    .replace(",", ".");
+  if (!compact || !/^\d+(?:\.\d+)?$/.test(compact)) {
+    const digits = String(raw || "").replace(/[^\d]/g, "");
+    return digits ? Number(digits) : null;
+  }
+  const value = Number(compact);
+  return Number.isFinite(value) ? Math.round(value) : null;
+}
+
 export function parsePriceText(text) {
   if (!text || !String(text).trim()) {
     return null;
   }
+  text = String(text).replaceAll("₼", " AZN");
   const azn = PRICE_AZN_PATTERN.exec(text);
   if (azn) {
-    const digits = azn[1].replace(/[\s.,]/g, "");
-    if (digits) {
-      return Number(digits);
+    const value = digitsToNumber(azn[1]);
+    if (value != null) {
+      return value;
     }
   }
   const match = PRICE_PATTERN.exec(text);
   if (!match) {
     return null;
   }
-  const digits = match[0].replace(/[\s.,]/g, "");
-  return digits ? Number(digits) : null;
+  return digitsToNumber(match[0]);
 }
 
 export function parsePriceFromText(text) {
-  if (!text) {
-    return null;
-  }
-  const match = PRICE_PATTERN.exec(text);
-  if (!match) {
-    return null;
-  }
-  const digits = match[0].replace(/\s+/g, "");
-  return digits ? Number(digits) : null;
+  return parsePriceText(text);
 }
 
 export function parsePriceNearPosting(html, postingId) {
@@ -91,7 +105,7 @@ export function parsePriceNearPosting(html, postingId) {
   if (idx < 0) {
     return null;
   }
-  const snippet = html.slice(idx, Math.min(html.length, idx + 2500));
+  const snippet = html.slice(idx, Math.min(html.length, idx + 12_000));
   const match = PRICE_AZN_PATTERN.exec(snippet);
   return match ? parsePriceText(`${match[1]} AZN`) : null;
 }
