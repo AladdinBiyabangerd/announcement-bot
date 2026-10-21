@@ -9,22 +9,8 @@ services:
     environment:
       PORT: 3000
       SQLITE_PATH: /data/announcement.db
-      SCRAPER_FLARESOLVERR_URL: ${SCRAPER_FLARESOLVERR_URL:-http://flaresolverr:8191}
     volumes:
       - bot_data:/data
-    depends_on:
-      - flaresolverr
-    restart: unless-stopped
-
-  flaresolverr:
-    image: ghcr.io/flaresolverr/flaresolverr:latest
-    container_name: announcement-bot-flaresolverr
-    ports:
-      - "8191:8191"
-    environment:
-      LOG_LEVEL: info
-      TZ: Asia/Baku
-      HEADLESS: "true"
     restart: unless-stopped
 
 volumes:
