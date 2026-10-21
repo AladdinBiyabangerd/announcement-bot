@@ -86,6 +86,20 @@ export const YENIEMLAK_CITY_BY_BINA = {
   33: "1",
 };
 
+export const EVV_CITY_SLUG_BY_BINA = {
+  1: "baki",
+  2: "gence",
+  3: "sumqayit",
+  33: "xirdalan",
+};
+
+export function evvCitySlug(binaCityId, cityName) {
+  if (binaCityId != null && EVV_CITY_SLUG_BY_BINA[binaCityId]) {
+    return EVV_CITY_SLUG_BY_BINA[binaCityId];
+  }
+  return slugify(resolveName(binaCityId, cityName));
+}
+
 export const EMLAK_CITY_BY_BINA = {
   1: "3",
   2: "6",

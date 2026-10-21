@@ -1,13 +1,16 @@
 import * as cheerio from "cheerio";
 import { SOURCES } from "../data/sources.js";
 import { TAP_LAND_MIN_SOT_PARAM, TAP_REGION_BY_BINA } from "./citySlugs.js";
-import { parseRooms, parseSot, parseSqm, buildQuery } from "./textParser.js";
-import { fetchHtml } from "./http.js";
+import { listing } from "./listing.js";
+import { fetchPaginatedListings } from "./paginate.js";
+import { parseRooms, parseSot, parseSqm, parsePriceFromText, buildQuery } from "./textParser.js";
 import { config } from "../config.js";
 
-export function buildSearchUrl(subscription) {
-  const categoryPath =
-    subscription.propertyType === "LAND" ? "torpaq-sahesi" : "menziller";
+function categoryPath(subscription) {
+  return subscription.propertyType === "LAND" ? "torpaq-sahesi" : "heyet-evleri";
+}
+
+export function buildSearchUrl(subscription, page = 1) {
   const params = [];
   params.push(["q[price][]", subscription.minPrice ?? ""]);
   params.push(["q[price][]", subscription.maxPrice ?? ""]);
@@ -21,61 +24,128 @@ export function buildSearchUrl(subscription) {
     params.push([key, subscription.landSot ?? ""]);
     params.push([key, ""]);
   }
-  return `${SOURCES.TAP_AZ.baseUrl}/elanlar/dasinmaz-emlak/${categoryPath}?${buildQuery(params)}`;
+  if (page > 1) {
+    params.push(["page", page]);
+  }
+  return `${SOURCES.TAP_AZ.baseUrl}/elanlar/dasinmaz-emlak/${categoryPath(subscription)}?${buildQuery(params)}`;
 }
 
 function toListing(ad) {
   const title = ad.title || "";
-  const path = ad.path || "";
+  const path = ad.path || ad.url || "";
   let publishedAt = null;
   if (ad.updatedAt) {
     const parsed = Date.parse(ad.updatedAt);
     publishedAt = Number.isNaN(parsed) ? null : new Date(parsed).toISOString();
   }
-  return {
+  const href = path.startsWith("http") ? path : `${SOURCES.TAP_AZ.baseUrl}${path}`;
+  return listing({
     source: SOURCES.TAP_AZ.name,
     sourceLabel: SOURCES.TAP_AZ.label,
-    externalId: String(ad.legacyResourceId ?? ""),
+    externalId: String(ad.legacyResourceId ?? ad.id ?? ""),
     title,
-    price: typeof ad.price === "number" ? ad.price : null,
+    price: typeof ad.price === "number" ? ad.price : parsePriceFromText(String(ad.price || "")),
     currency: "AZN",
-    region: ad.region || null,
-    url: `${SOURCES.TAP_AZ.baseUrl}${path}`,
-    imageUrl: ad.photo && typeof ad.photo === "object" ? ad.photo.url || null : null,
+    region: ad.region || ad.city || null,
+    url: href,
+    imageUrl: ad.photo && typeof ad.photo === "object" ? ad.photo.url || null : ad.imageUrl || null,
     publishedAt,
     areaSqm: parseSqm([], title),
     landSot: parseSot([], title),
     roomCount: parseRooms([], title),
-  };
+    country: "AZ",
+  });
 }
 
-export function parse(html) {
+function parseNextData(html) {
   const $ = cheerio.load(html);
   const nextData = $("#__NEXT_DATA__").text() || $("#__NEXT_DATA__").html();
   if (!nextData) {
-    throw new Error("tap.az: __NEXT_DATA__ tapılmadı");
+    return null;
   }
   let root;
   try {
     root = JSON.parse(nextData);
   } catch {
-    throw new Error("tap.az JSON parse xətası");
+    return null;
   }
   const apolloState = root?.props?.pageProps?.apolloState;
-  if (!apolloState || typeof apolloState !== "object") {
-    return [];
-  }
-  const listings = [];
-  for (const [key, ad] of Object.entries(apolloState)) {
-    if (!key.startsWith("Ad:") || !ad || ad.__typename !== "Ad") {
-      continue;
+  if (apolloState && typeof apolloState === "object") {
+    const listings = [];
+    for (const [key, ad] of Object.entries(apolloState)) {
+      if (!key.startsWith("Ad:") || !ad || ad.__typename !== "Ad") {
+        continue;
+      }
+      listings.push(toListing(ad));
     }
-    listings.push(toListing(ad));
+    if (listings.length) {
+      return listings;
+    }
   }
+  return [];
+}
+
+function parseHtmlCards(html) {
+  const $ = cheerio.load(html);
+  const listings = [];
+  $("a.products-link[href], a[href*='/elanlar/dasinmaz-emlak/']").each((_, link) => {
+    const el = $(link);
+    const href = el.attr("href") || "";
+    const match = href.match(/\/(\d+)(?:\/)?(?:\?|$)/);
+    if (!match) {
+      return;
+    }
+    const externalId = match[1];
+    if (listings.some((row) => row.externalId === externalId)) {
+      return;
+    }
+    const title =
+      el.attr("title") ||
+      el.find("img[alt]").attr("alt") ||
+      el.find(".products-name, .product-title").first().text() ||
+      `Elan #${externalId}`;
+    const card = el.closest("div, li, article");
+    const priceText = card.find(".products-price, .price").first().text() || el.text();
+    listings.push(
+      listing({
+        source: SOURCES.TAP_AZ.name,
+        sourceLabel: SOURCES.TAP_AZ.label,
+        externalId,
+        title: title.trim(),
+        price: parsePriceFromText(priceText),
+        currency: "AZN",
+        region: card.find(".products-created, .location").first().text().trim() || null,
+        url: href.startsWith("http") ? href : `${SOURCES.TAP_AZ.baseUrl}${href}`,
+        imageUrl: el.find("img").attr("src") || null,
+        areaSqm: parseSqm([], title),
+        landSot: parseSot([], title),
+        roomCount: parseRooms([], title),
+        country: "AZ",
+      }),
+    );
+  });
   return listings;
 }
 
+export function parse(html) {
+  const fromJson = parseNextData(html);
+  if (fromJson && fromJson.length) {
+    return fromJson;
+  }
+  const fromHtml = parseHtmlCards(html);
+  if (fromHtml.length) {
+    return fromHtml;
+  }
+  if (fromJson === null) {
+    throw new Error("tap.az: __NEXT_DATA__ tapılmadı və HTML kartlar oxunmadı");
+  }
+  return [];
+}
+
 export async function fetchListings(subscription) {
-  const html = await fetchHtml(buildSearchUrl(subscription));
-  return parse(html).slice(0, config.scraper.maxResultsPerSource);
+  return fetchPaginatedListings({
+    buildPageUrl: (page) => buildSearchUrl(subscription, page),
+    parse,
+    max: config.scraper.maxResultsPerSource,
+  });
 }

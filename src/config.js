@@ -28,6 +28,7 @@ export const config = {
     pollIntervalMs: envNumber("SCRAPER_POLL_INTERVAL_MS", 1_800_000),
     requestDelayMs: envNumber("SCRAPER_REQUEST_DELAY_MS", 2500),
     maxResultsPerSource: envNumber("SCRAPER_MAX_RESULTS", 40),
+    maxPagesPerSource: envNumber("SCRAPER_MAX_PAGES", 3),
     userAgent:
       process.env.SCRAPER_USER_AGENT ||
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",

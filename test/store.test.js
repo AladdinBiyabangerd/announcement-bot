@@ -23,6 +23,7 @@ test("creates subscription, lists, deletes, and tracks seen listings", () => {
   });
   assert.equal(subscription.name, "Torpaq — Bakı");
   assert.equal(subscription.active, true);
+  assert.equal(subscription.requireKupca, false);
   assert.equal(listForUser(db, user).length, 1);
   assert.equal(isSeen(db, subscription.id, "BINA_AZ", "99"), false);
   markSeen(db, subscription.id, "BINA_AZ", "99");
@@ -54,5 +55,21 @@ test("pruneOldSeenListings removes rows older than retention days", () => {
   assert.equal(pruneOldSeenListings(db, 30), 1);
   assert.equal(isSeen(db, subscription.id, "BINA_AZ", "old"), false);
   assert.equal(isSeen(db, subscription.id, "BINA_AZ", "fresh"), true);
+  db.close();
+});
+
+test("stores requireKupca from draft and includes new sources", () => {
+  const db = openDb(":memory:");
+  const user = registerUser(db, 42, "ali", "Ali", "az");
+  const subscription = createFromDraft(db, user, {
+    propertyType: "HOUSE",
+    cityId: 1,
+    cityName: "Bakı",
+    requireKupca: true,
+    maxPrice: 150000,
+  });
+  assert.equal(subscription.requireKupca, true);
+  assert.match(subscription.sources, /arenda/);
+  assert.match(subscription.sources, /binatap/);
   db.close();
 });

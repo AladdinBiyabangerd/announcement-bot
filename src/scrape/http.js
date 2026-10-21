@@ -18,9 +18,9 @@ function dispatcher() {
   return undefined;
 }
 
-export function browserHeaders(url, userAgent) {
+export function browserHeaders(url, userAgent, extraHeaders = {}) {
   const headers = {
-    Accept: "text/html,application/xhtml+xml,application/xml,*/*",
+    Accept: extraHeaders.Accept || "text/html,application/xhtml+xml,application/xml,*/*",
     "Accept-Language": "az-AZ,az;q=0.9,en-US;q=0.8,en;q=0.7",
     "Cache-Control": "max-age=0",
     "Sec-Fetch-Dest": "document",
@@ -37,9 +37,14 @@ export function browserHeaders(url, userAgent) {
   }
   try {
     const parsed = new URL(url);
-    headers.Referer = `${parsed.origin}/`;
+    headers.Referer = extraHeaders.Referer || `${parsed.origin}/`;
   } catch {
     // keep request without referer
+  }
+  for (const [key, value] of Object.entries(extraHeaders)) {
+    if (value != null && value !== "") {
+      headers[key] = value;
+    }
   }
   return headers;
 }
@@ -67,10 +72,24 @@ function toFetchException(url, status, body) {
   );
 }
 
-async function directFetch(url) {
+function isRetryableNetwork(err) {
+  const code = err?.cause?.code || err?.code || "";
+  const name = err?.name || "";
+  return (
+    name === "TimeoutError" ||
+    name === "AbortError" ||
+    code === "ECONNRESET" ||
+    code === "ETIMEDOUT" ||
+    code === "UND_ERR_CONNECT_TIMEOUT" ||
+    code === "UND_ERR_HEADERS_TIMEOUT" ||
+    code === "UND_ERR_SOCKET"
+  );
+}
+
+async function directFetchOnce(url, extraHeaders = {}) {
   const response = await fetch(url, {
     method: "GET",
-    headers: browserHeaders(url, config.scraper.userAgent),
+    headers: browserHeaders(url, config.scraper.userAgent, extraHeaders),
     dispatcher: dispatcher(),
     signal: AbortSignal.timeout(90_000),
   });
@@ -82,6 +101,25 @@ async function directFetch(url) {
     throw new SourceFetchError(url, response.status, true, "Cloudflare challenge səhifəsi qayıtdı");
   }
   return body;
+}
+
+async function directFetch(url, extraHeaders = {}) {
+  let lastError;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      return await directFetchOnce(url, extraHeaders);
+    } catch (err) {
+      lastError = err;
+      if (err instanceof SourceFetchError && err.cloudflareBlock) {
+        throw err;
+      }
+      if (!isRetryableNetwork(err) || attempt === 3) {
+        throw err;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 400 * attempt));
+    }
+  }
+  throw lastError;
 }
 
 async function fetchWithFlareSolverr(targetUrl) {
@@ -128,9 +166,18 @@ async function fetchWithBypass(url, original) {
   throw original;
 }
 
-export async function fetchHtml(url) {
+export async function fetchJson(url, extraHeaders = {}) {
+  const htmlOrJson = await fetchHtml(url, extraHeaders);
   try {
-    return await directFetch(url);
+    return JSON.parse(htmlOrJson);
+  } catch {
+    throw new Error(`JSON parse xətası: ${url}`);
+  }
+}
+
+export async function fetchHtml(url, extraHeaders = {}) {
+  try {
+    return await directFetch(url, extraHeaders);
   } catch (err) {
     if (err instanceof SourceFetchError && err.cloudflareBlock) {
       console.warn(`Cloudflare blokladı (${err.statusCode}): ${url}`);

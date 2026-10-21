@@ -34,6 +34,7 @@ function mapSubscription(row) {
     roomCount: row.room_count,
     minPrice: row.min_price,
     maxPrice: row.max_price,
+    requireKupca: Boolean(row.require_kupca),
     city: row.city,
     active: Boolean(row.active),
     createdAt: row.created_at,
@@ -85,8 +86,8 @@ export function createFromDraft(db, user, draft) {
       `INSERT INTO search_subscriptions (
         user_id, name, sources, keywords, property_type, bina_category_id,
         city_id, city_name, city, area_sqm, land_sot, room_count,
-        min_price, max_price, active, created_at, updated_at
-      ) VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+        min_price, max_price, require_kupca, active, created_at, updated_at
+      ) VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
     )
     .run(
       user.id,
@@ -102,6 +103,7 @@ export function createFromDraft(db, user, draft) {
       draft.roomCount ?? null,
       draft.minPrice ?? null,
       draft.maxPrice ?? null,
+      draft.requireKupca ? 1 : 0,
       ts,
       ts,
     );

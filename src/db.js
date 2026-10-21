@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS search_subscriptions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
     name TEXT NOT NULL,
-    sources TEXT NOT NULL DEFAULT 'bina,tap,ev10,yeniemlak,emlak',
+    sources TEXT NOT NULL DEFAULT 'bina,tap,ev10,yeniemlak,emlak,arenda,evv,unvan,lalafo,binatap',
     keywords TEXT,
     property_type TEXT,
     bina_category_id INTEGER,
@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS search_subscriptions (
     min_price INTEGER,
     max_price INTEGER,
     city TEXT,
+    require_kupca INTEGER NOT NULL DEFAULT 0,
     active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
@@ -82,5 +83,13 @@ export function openDb(sqlitePath) {
   db.pragma("foreign_keys = ON");
   db.pragma("busy_timeout = 5000");
   db.exec(SCHEMA);
+  migrate(db);
   return db;
+}
+
+function migrate(db) {
+  const columns = db.prepare("PRAGMA table_info(search_subscriptions)").all().map((col) => col.name);
+  if (!columns.includes("require_kupca")) {
+    db.exec("ALTER TABLE search_subscriptions ADD COLUMN require_kupca INTEGER NOT NULL DEFAULT 0");
+  }
 }
