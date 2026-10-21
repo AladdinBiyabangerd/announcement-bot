@@ -3,7 +3,7 @@ export const PROPERTY_TYPES = {
     name: "HOUSE",
     userChoice: 1,
     binaCategoryId: 5,
-    label: "Ev (həyət evi / bağ evi)",
+    label: "Ev (mənzil / həyət evi / bağ evi)",
     shortLabel: "Ev",
   },
   LAND: {

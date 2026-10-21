@@ -2,7 +2,8 @@ import * as cheerio from "cheerio";
 import { SOURCES } from "../data/sources.js";
 import { evvCitySlug } from "./citySlugs.js";
 import { listing } from "./listing.js";
-import { fetchPaginatedListings } from "./paginate.js";
+import { fetchMergedCategoryListings } from "./paginate.js";
+import { evvRoomIdsFromMin } from "./minFilters.js";
 import {
   buildQuery,
   firstNonBlank,
@@ -12,23 +13,26 @@ import {
   parseSot,
   parseSqm,
 } from "./textParser.js";
-import { config } from "../config.js";
 
 const PAGE_SIZE = 24;
 
-function categorySlug(subscription) {
-  return subscription.propertyType === "LAND" ? "torpaq" : "heyet-evi";
-}
-
-function categoryId(subscription) {
-  return subscription.propertyType === "LAND" ? "5" : "3";
+export function houseCategories(subscription) {
+  if (subscription.propertyType === "LAND") {
+    return [{ slug: "torpaq", id: "5" }];
+  }
+  return [
+    { slug: "yeni-tikili", id: "1" },
+    { slug: "kohne-tikili", id: "2" },
+    { slug: "heyet-evi", id: "3" },
+  ];
 }
 
 function hasCity(subscription) {
   return subscription.cityId != null || Boolean(subscription.cityName?.trim());
 }
 
-export function buildSearchUrl(subscription, page = 1) {
+export function buildSearchUrl(subscription, page = 1, category = null) {
+  const selected = category || houseCategories(subscription)[0];
   const params = [["type", "1"]];
   if (subscription.minPrice != null) {
     params.push(["price_min", subscription.minPrice]);
@@ -38,24 +42,25 @@ export function buildSearchUrl(subscription, page = 1) {
   }
   if (subscription.propertyType === "HOUSE" && subscription.areaSqm != null) {
     params.push(["area_min", subscription.areaSqm]);
-    params.push(["area_max", subscription.areaSqm]);
   }
   if (subscription.propertyType === "LAND" && subscription.landSot != null) {
     params.push(["area2_min", subscription.landSot]);
   }
   if (subscription.roomCount != null) {
-    params.push(["room[]", subscription.roomCount >= 5 ? "4" : String(subscription.roomCount)]);
+    for (const roomId of evvRoomIdsFromMin(subscription.roomCount)) {
+      params.push(["room[]", roomId]);
+    }
   }
   if (page > 1) {
     params.push(["page", String((page - 1) * PAGE_SIZE)]);
   }
   if (hasCity(subscription)) {
     const city = evvCitySlug(subscription.cityId, subscription.cityName);
-    const path = `${SOURCES.EVV_AZ.baseUrl}/emlak/${city}/satilir/${categorySlug(subscription)}`;
+    const path = `${SOURCES.EVV_AZ.baseUrl}/emlak/${city}/satilir/${selected.slug}`;
     const query = buildQuery(params.filter(([key]) => key !== "type"));
     return query ? `${path}?${query}` : path;
   }
-  params.push(["category", categoryId(subscription)]);
+  params.push(["category", selected.id]);
   params.push(["city", "0"]);
   return `${SOURCES.EVV_AZ.baseUrl}/axtaris?${buildQuery(params)}`;
 }
@@ -109,9 +114,9 @@ export function parse(html) {
 }
 
 export async function fetchListings(subscription) {
-  return fetchPaginatedListings({
-    buildPageUrl: (page) => buildSearchUrl(subscription, page),
+  return fetchMergedCategoryListings({
+    categories: houseCategories(subscription),
+    buildPageUrl: (page, category) => buildSearchUrl(subscription, page, category),
     parse,
-    max: config.scraper.maxResultsPerSource,
   });
 }

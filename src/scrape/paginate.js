@@ -6,6 +6,35 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+export async function fetchMergedCategoryListings({
+  categories,
+  buildPageUrl,
+  parse,
+  maxPerCategory = config.scraper.maxResultsPerSource,
+}) {
+  const batches = [];
+  let lastError = null;
+  for (const category of categories) {
+    try {
+      batches.push(
+        await fetchPaginatedListings({
+          buildPageUrl: (page) => buildPageUrl(page, category),
+          parse,
+          max: maxPerCategory,
+        }),
+      );
+    } catch (err) {
+      lastError = err;
+      console.warn(`Kateqoriya oxunmadı: ${String(category)}`, err?.message || err);
+    }
+  }
+  const merged = dedupeListings(batches.flat());
+  if (!merged.length && lastError) {
+    throw lastError;
+  }
+  return merged;
+}
+
 export async function fetchPaginatedListings({
   buildPageUrl,
   parse,

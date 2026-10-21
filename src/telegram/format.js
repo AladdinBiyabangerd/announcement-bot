@@ -13,7 +13,7 @@ export function formatRoomCount(count) {
   if (count == null) {
     return null;
   }
-  return count === 5 ? "5+" : String(count);
+  return `${count}+`;
 }
 
 export function formatPriceRange(subscription) {
@@ -31,10 +31,10 @@ export function formatPriceRange(subscription) {
 
 function formatAreaLine(subscription) {
   if (subscription.areaSqm != null) {
-    return `${formatAzNumber(subscription.areaSqm)} m²`;
+    return `Sahə: ${formatAzNumber(subscription.areaSqm)} m²+`;
   }
   if (subscription.landSot != null) {
-    return `${formatAzNumber(subscription.landSot)} sot`;
+    return `Torpaq: ${formatAzNumber(subscription.landSot)} sot+`;
   }
   return null;
 }
@@ -47,7 +47,7 @@ function formatDetails(subscription) {
   }
   const rooms = formatRoomCount(subscription.roomCount);
   if (rooms) {
-    parts.push(`${rooms} otaq`);
+    parts.push(`Otaq: ${rooms}`);
   }
   parts.push(formatPriceRange(subscription));
   if (subscription.requireKupca) {
@@ -70,7 +70,7 @@ export function formatConfirmationHtml(subscription) {
   }
   const rooms = formatRoomCount(subscription.roomCount);
   if (rooms) {
-    meta.push(`🚪 ${rooms} otaq`);
+    meta.push(`🚪 Otaq: ${rooms}`);
   }
   if (meta.length) {
     lines.push(meta.join("  ·  "));

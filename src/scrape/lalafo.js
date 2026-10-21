@@ -16,6 +16,7 @@ const AZ_COUNTRY_ID = 13;
 
 const CATEGORIES = {
   HOUSE: [
+    { id: 2014, path: "/azerbaijan/kvartiry" },
     { id: 2030, path: "/azerbaijan/doma-i-dachi" },
     { id: 5951, path: "/azerbaijan/bag-evleri" },
   ],
@@ -170,7 +171,7 @@ async function fetchApi(subscription) {
       }
     }
   }
-  return collected.slice(0, config.scraper.maxResultsPerSource);
+  return collected;
 }
 
 export async function fetchListings(subscription) {
@@ -191,7 +192,7 @@ export async function fetchListings(subscription) {
   }
   const fromHtml = dedupeListings(batches.flat());
   if (fromHtml.length) {
-    return fromHtml.slice(0, config.scraper.maxResultsPerSource);
+    return fromHtml;
   }
   try {
     return await fetchApi(subscription);

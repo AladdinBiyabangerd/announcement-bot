@@ -12,11 +12,11 @@ import {
 } from "./textParser.js";
 import { config } from "../config.js";
 
-function categoryPaths(subscription) {
+export function categoryPaths(subscription) {
   if (subscription.propertyType === "LAND") {
     return ["torpaq-satilir"];
   }
-  return ["heyet-evi-satilir", "bag-evi-satilir"];
+  return ["yeni-tikili", "kohne-tikili", "heyet-evi-satilir", "bag-evi-satilir"];
 }
 
 export function buildSearchUrl(subscription, page = 1, path = null) {
@@ -90,5 +90,5 @@ export async function fetchListings(subscription) {
       }),
     );
   }
-  return dedupeListings(batches.flat()).slice(0, config.scraper.maxResultsPerSource);
+  return dedupeListings(batches.flat());
 }

@@ -1,7 +1,7 @@
 import * as cheerio from "cheerio";
 import { SOURCES } from "../data/sources.js";
 import { listing } from "./listing.js";
-import { fetchPaginatedListings } from "./paginate.js";
+import { fetchMergedCategoryListings } from "./paginate.js";
 import {
   firstNonBlank,
   normalizeWhitespace,
@@ -10,14 +10,16 @@ import {
   parseSot,
   parseSqm,
 } from "./textParser.js";
-import { config } from "../config.js";
 
-function categoryPath(subscription) {
-  return subscription.propertyType === "LAND" ? "torpaq-sahesi" : "heyet-evi-villa";
+export function categoryPaths(subscription) {
+  if (subscription.propertyType === "LAND") {
+    return ["torpaq-sahesi"];
+  }
+  return ["menziller", "heyet-evi-villa"];
 }
 
-export function buildSearchUrl(subscription, page = 1) {
-  const url = `${SOURCES.UNVAN_AZ.baseUrl}/${categoryPath(subscription)}`;
+export function buildSearchUrl(subscription, page = 1, category = null) {
+  const url = `${SOURCES.UNVAN_AZ.baseUrl}/${category || categoryPaths(subscription)[0]}`;
   return page > 1 ? `${url}?page=${page}` : url;
 }
 
@@ -64,9 +66,9 @@ export function parse(html) {
 }
 
 export async function fetchListings(subscription) {
-  return fetchPaginatedListings({
-    buildPageUrl: (page) => buildSearchUrl(subscription, page),
+  return fetchMergedCategoryListings({
+    categories: categoryPaths(subscription),
+    buildPageUrl: (page, category) => buildSearchUrl(subscription, page, category),
     parse,
-    max: config.scraper.maxResultsPerSource,
   });
 }

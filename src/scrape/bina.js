@@ -2,8 +2,9 @@ import * as cheerio from "cheerio";
 import { SOURCES } from "../data/sources.js";
 import { binaCitySlug } from "./citySlugs.js";
 import { listing } from "./listing.js";
-import { fetchPaginatedListings } from "./paginate.js";
+import { fetchMergedCategoryListings, fetchPaginatedListings } from "./paginate.js";
 import { firstNonBlank, parsePriceFromText, parseSot, buildQuery } from "./textParser.js";
+import { roomIdsFromMin } from "./minFilters.js";
 import { config } from "../config.js";
 
 const ROOM_PATTERN = /(\d+)\s*\+?\s*otaq/iu;
@@ -36,8 +37,11 @@ function parseSqm(params, title) {
   return null;
 }
 
-function categorySlug(subscription) {
-  return subscription.propertyType === "LAND" ? "torpaq" : "heyet-evleri";
+export function categoryPaths(subscription) {
+  if (subscription.propertyType === "LAND") {
+    return ["torpaq"];
+  }
+  return ["menziller", "heyet-evleri", "bag-evleri"];
 }
 
 function applyFilters(params, subscription) {
@@ -58,10 +62,11 @@ function applyFilters(params, subscription) {
   }
   if (subscription.propertyType === "HOUSE" && subscription.areaSqm != null) {
     params.push(["area_from", subscription.areaSqm]);
-    params.push(["area_to", subscription.areaSqm]);
   }
   if (subscription.roomCount != null) {
-    params.push(["room_ids[]", subscription.roomCount >= 5 ? "5+" : String(subscription.roomCount)]);
+    for (const roomId of roomIdsFromMin(subscription.roomCount)) {
+      params.push(["room_ids[]", roomId]);
+    }
   }
   if (subscription.minPrice != null) {
     params.push(["price_from", subscription.minPrice]);
@@ -71,23 +76,24 @@ function applyFilters(params, subscription) {
   }
 }
 
-export function buildSeoPath(subscription, page = 1) {
+export function buildSeoPath(subscription, page = 1, category = null) {
   const params = [];
   applyFilters(params, subscription);
   if (page > 1) {
     params.push(["page", page]);
   }
   const query = buildQuery(params);
+  const slug = category || categoryPaths(subscription)[0];
   const hasCity = subscription.cityId != null || Boolean(subscription.cityName?.trim());
   const path = hasCity
-    ? `${SOURCES.BINA_AZ.baseUrl}/${binaCitySlug(subscription.cityId, subscription.cityName)}/alqi-satqi/${categorySlug(subscription)}`
-    : `${SOURCES.BINA_AZ.baseUrl}/alqi-satqi/${categorySlug(subscription)}`;
+    ? `${SOURCES.BINA_AZ.baseUrl}/${binaCitySlug(subscription.cityId, subscription.cityName)}/alqi-satqi/${slug}`
+    : `${SOURCES.BINA_AZ.baseUrl}/alqi-satqi/${slug}`;
   return query ? `${path}?${query}` : path;
 }
 
-export function buildSearchUrl(subscription, page = 1) {
+export function buildSearchUrl(subscription, page = 1, category = null) {
   if (subscription.propertyType) {
-    return buildSeoPath(subscription, page);
+    return buildSeoPath(subscription, page, category);
   }
   const params = [["leased", "false"]];
   const keywords = (subscription.keywords || "").trim();
@@ -164,6 +170,13 @@ export function parse(html) {
 }
 
 export async function fetchListings(subscription) {
+  if (subscription.propertyType) {
+    return fetchMergedCategoryListings({
+      categories: categoryPaths(subscription),
+      buildPageUrl: (page, category) => buildSearchUrl(subscription, page, category),
+      parse,
+    });
+  }
   return fetchPaginatedListings({
     buildPageUrl: (page) => buildSearchUrl(subscription, page),
     parse,

@@ -55,6 +55,34 @@ test("land search rejects apartment", () => {
   );
 });
 
+test("house search accepts apartment, heyet evi and bag evi", () => {
+  const subscription = { propertyType: "HOUSE", cityName: "Bakı" };
+  assert.equal(matches(listing("3 otaqlı mənzil, yeni tikili 90 m²", 120_000, { roomCount: 3, areaSqm: 90 }), subscription), true);
+  assert.equal(matches(listing("2 otaqlı köhnə tikili 60 m²", 90_000, { roomCount: 2, areaSqm: 60 }), subscription), true);
+  assert.equal(matches(listing("Həyət evi 4 otaqlı", 80_000, { roomCount: 4 }), subscription), true);
+  assert.equal(matches(listing("Bağ evi 5 otaqlı", 95_000, { roomCount: 5 }), subscription), true);
+});
+
+test("house room and area filters are minimums", () => {
+  const subscription = { propertyType: "HOUSE", cityName: "Bakı", roomCount: 3, areaSqm: 100 };
+  assert.equal(
+    matches(listing("2 otaqlı mənzil 120 m²", 90_000, { roomCount: 2, areaSqm: 120 }), subscription),
+    false,
+  );
+  assert.equal(
+    matches(listing("3 otaqlı mənzil 90 m²", 90_000, { roomCount: 3, areaSqm: 90 }), subscription),
+    false,
+  );
+  assert.equal(
+    matches(listing("3 otaqlı mənzil 100 m²", 90_000, { roomCount: 3, areaSqm: 100 }), subscription),
+    true,
+  );
+  assert.equal(
+    matches(listing("5 otaqlı həyət evi 140 m²", 90_000, { roomCount: 5, areaSqm: 140 }), subscription),
+    true,
+  );
+});
+
 test("house search rejects land", () => {
   assert.equal(
     matches(listing("Torpaq 10 sot", 5000, { landSot: 10 }), {

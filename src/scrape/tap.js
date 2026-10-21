@@ -2,15 +2,17 @@ import * as cheerio from "cheerio";
 import { SOURCES } from "../data/sources.js";
 import { TAP_LAND_MIN_SOT_PARAM, TAP_REGION_BY_BINA } from "./citySlugs.js";
 import { listing } from "./listing.js";
-import { fetchPaginatedListings } from "./paginate.js";
+import { fetchMergedCategoryListings } from "./paginate.js";
 import { parseRooms, parseSot, parseSqm, parsePriceFromText, buildQuery } from "./textParser.js";
-import { config } from "../config.js";
 
-function categoryPath(subscription) {
-  return subscription.propertyType === "LAND" ? "torpaq-sahesi" : "heyet-evleri";
+export function categoryPaths(subscription) {
+  if (subscription.propertyType === "LAND") {
+    return ["torpaq-sahesi"];
+  }
+  return ["menziller", "heyet-evleri", "bag-evleri"];
 }
 
-export function buildSearchUrl(subscription, page = 1) {
+export function buildSearchUrl(subscription, page = 1, category = null) {
   const params = [];
   params.push(["q[price][]", subscription.minPrice ?? ""]);
   params.push(["q[price][]", subscription.maxPrice ?? ""]);
@@ -27,7 +29,8 @@ export function buildSearchUrl(subscription, page = 1) {
   if (page > 1) {
     params.push(["page", page]);
   }
-  return `${SOURCES.TAP_AZ.baseUrl}/elanlar/dasinmaz-emlak/${categoryPath(subscription)}?${buildQuery(params)}`;
+  const path = category || categoryPaths(subscription)[0];
+  return `${SOURCES.TAP_AZ.baseUrl}/elanlar/dasinmaz-emlak/${path}?${buildQuery(params)}`;
 }
 
 function toListing(ad) {
@@ -143,9 +146,9 @@ export function parse(html) {
 }
 
 export async function fetchListings(subscription) {
-  return fetchPaginatedListings({
-    buildPageUrl: (page) => buildSearchUrl(subscription, page),
+  return fetchMergedCategoryListings({
+    categories: categoryPaths(subscription),
+    buildPageUrl: (page, category) => buildSearchUrl(subscription, page, category),
     parse,
-    max: config.scraper.maxResultsPerSource,
   });
 }

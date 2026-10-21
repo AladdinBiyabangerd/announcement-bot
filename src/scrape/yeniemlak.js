@@ -2,9 +2,8 @@ import * as cheerio from "cheerio";
 import { SOURCES } from "../data/sources.js";
 import { YENIEMLAK_CITY_BY_BINA } from "./citySlugs.js";
 import { listing } from "./listing.js";
-import { fetchPaginatedListings } from "./paginate.js";
+import { fetchMergedCategoryListings } from "./paginate.js";
 import { buildQuery, normalizeWhitespace, parsePriceText, parseRooms, parseSot } from "./textParser.js";
-import { config } from "../config.js";
 
 const LISTING_ID_PATTERN = /-([0-9]+)$/;
 
@@ -50,21 +49,28 @@ function parseYeniemlakSqm(params) {
   return null;
 }
 
-export function buildSearchUrl(subscription, page = 1) {
+export function emlakTypes(subscription) {
+  if (subscription.propertyType === "LAND") {
+    return ["3"];
+  }
+  return ["1", "2"];
+}
+
+export function buildSearchUrl(subscription, page = 1, emlakType = null) {
   const land = subscription.propertyType === "LAND";
   const house = subscription.propertyType === "HOUSE";
   const params = [
     ["elan_nov", "1"],
-    ["emlak", land ? "3" : "2"],
+    ["emlak", emlakType || emlakTypes(subscription)[0]],
     ["menzil_nov", ""],
     ["qiymet", subscription.minPrice ?? ""],
     ["qiymet2", subscription.maxPrice ?? ""],
     ["mertebe", ""],
     ["mertebe2", ""],
     ["otaq", house && subscription.roomCount != null ? subscription.roomCount : ""],
-    ["otaq2", house && subscription.roomCount != null ? subscription.roomCount : ""],
+    ["otaq2", ""],
     ["sahe_m", house && subscription.areaSqm != null ? subscription.areaSqm : ""],
-    ["sahe_m2", house && subscription.areaSqm != null ? subscription.areaSqm : ""],
+    ["sahe_m2", ""],
     ["sahe_s", land && subscription.landSot != null ? subscription.landSot : ""],
     ["sahe_s2", ""],
   ];
@@ -125,9 +131,9 @@ export function parse(html) {
 }
 
 export async function fetchListings(subscription) {
-  return fetchPaginatedListings({
-    buildPageUrl: (page) => buildSearchUrl(subscription, page),
+  return fetchMergedCategoryListings({
+    categories: emlakTypes(subscription),
+    buildPageUrl: (page, emlakType) => buildSearchUrl(subscription, page, emlakType),
     parse,
-    max: config.scraper.maxResultsPerSource,
   });
 }
