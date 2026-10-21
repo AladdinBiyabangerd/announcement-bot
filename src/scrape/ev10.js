@@ -2,7 +2,7 @@ import * as cheerio from "cheerio";
 import { SOURCES } from "../data/sources.js";
 import { ev10Location } from "./citySlugs.js";
 import { listing } from "./listing.js";
-import { fetchPaginatedListings } from "./paginate.js";
+import { fetchMergedCategoryListings } from "./paginate.js";
 import {
   buildQuery,
   firstNonBlank,
@@ -13,7 +13,6 @@ import {
   parseSot,
   parseSqm,
 } from "./textParser.js";
-import { config } from "../config.js";
 
 function extractRegion(title) {
   const comma = title.lastIndexOf(",");
@@ -23,11 +22,14 @@ function extractRegion(title) {
   return title.slice(comma + 1).trim();
 }
 
-function categoryPath(subscription) {
-  return subscription.propertyType === "LAND" ? "torpaq" : "bag-evi";
+export function categoryPaths(subscription) {
+  if (subscription.propertyType === "LAND") {
+    return ["torpaq"];
+  }
+  return ["menzil", "heyet-evi", "bag-evi"];
 }
 
-export function buildSearchUrl(subscription, page = 1) {
+export function buildSearchUrl(subscription, page = 1, category = null) {
   const params = [
     ["page_number", page],
     ["media_type", "image"],
@@ -45,15 +47,10 @@ export function buildSearchUrl(subscription, page = 1) {
   if (subscription.propertyType === "LAND" && subscription.landSot != null) {
     params.push(["min_area", subscription.landSot]);
   }
-  if (subscription.propertyType === "HOUSE") {
-    if (subscription.areaSqm != null) {
-      params.push(["min_area", subscription.areaSqm]);
-    }
-    if (subscription.roomCount != null) {
-      params.push(["rooms", subscription.roomCount]);
-    }
+  if (subscription.propertyType === "HOUSE" && subscription.areaSqm != null) {
+    params.push(["min_area", subscription.areaSqm]);
   }
-  return `${SOURCES.EV10_AZ.baseUrl}/alqi-satqi/${categoryPath(subscription)}?${buildQuery(params)}`;
+  return `${SOURCES.EV10_AZ.baseUrl}/alqi-satqi/${category || categoryPaths(subscription)[0]}?${buildQuery(params)}`;
 }
 
 export function parse(html) {
@@ -105,9 +102,9 @@ export function parse(html) {
 }
 
 export async function fetchListings(subscription) {
-  return fetchPaginatedListings({
-    buildPageUrl: (page) => buildSearchUrl(subscription, page),
+  return fetchMergedCategoryListings({
+    categories: categoryPaths(subscription),
+    buildPageUrl: (page, category) => buildSearchUrl(subscription, page, category),
     parse,
-    max: config.scraper.maxResultsPerSource,
   });
 }

@@ -2,7 +2,7 @@ import * as cheerio from "cheerio";
 import { SOURCES } from "../data/sources.js";
 import { binaCitySlug } from "./citySlugs.js";
 import { listing } from "./listing.js";
-import { fetchPaginatedListings } from "./paginate.js";
+import { fetchMergedCategoryListings } from "./paginate.js";
 import {
   buildQuery,
   firstNonBlank,
@@ -12,25 +12,28 @@ import {
   parseSot,
   parseSqm,
 } from "./textParser.js";
-import { config } from "../config.js";
 
-function categorySlug(subscription) {
-  return subscription.propertyType === "LAND" ? "torpaq" : "heyet-evleri";
+export function categoryPaths(subscription) {
+  if (subscription.propertyType === "LAND") {
+    return ["torpaq"];
+  }
+  return ["menziller", "heyet-evleri", "bag-evleri"];
 }
 
 function hasCity(subscription) {
   return subscription.cityId != null || Boolean(subscription.cityName?.trim());
 }
 
-export function buildSearchUrl(subscription, page = 1) {
+export function buildSearchUrl(subscription, page = 1, category = null) {
   const params = [];
   if (page > 1) {
     params.push(["page", page]);
   }
   const query = buildQuery(params);
+  const slug = category || categoryPaths(subscription)[0];
   const path = hasCity(subscription)
-    ? `${SOURCES.BINATAP_AZ.baseUrl}/${binaCitySlug(subscription.cityId, subscription.cityName)}/alqi-satqi/${categorySlug(subscription)}`
-    : `${SOURCES.BINATAP_AZ.baseUrl}/alqi-satqi/${categorySlug(subscription)}`;
+    ? `${SOURCES.BINATAP_AZ.baseUrl}/${binaCitySlug(subscription.cityId, subscription.cityName)}/alqi-satqi/${slug}`
+    : `${SOURCES.BINATAP_AZ.baseUrl}/alqi-satqi/${slug}`;
   return query ? `${path}?${query}` : path;
 }
 
@@ -112,9 +115,9 @@ export function parse(html) {
 }
 
 export async function fetchListings(subscription) {
-  return fetchPaginatedListings({
-    buildPageUrl: (page) => buildSearchUrl(subscription, page),
+  return fetchMergedCategoryListings({
+    categories: categoryPaths(subscription),
+    buildPageUrl: (page, category) => buildSearchUrl(subscription, page, category),
     parse,
-    max: config.scraper.maxResultsPerSource,
   });
 }

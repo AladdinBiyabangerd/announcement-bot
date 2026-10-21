@@ -20,9 +20,9 @@ function housePropertyTypes(subscription) {
     return ["7"];
   }
   if (subscription.propertyType === "HOUSE") {
-    return ["3", "4", "10"];
+    return ["1", "2", "3", "4", "10"];
   }
-  return ["3"];
+  return ["1", "2", "3", "4", "10"];
 }
 
 export function buildSearchUrl(subscription, page = 1, propertyType = null) {
@@ -41,11 +41,9 @@ export function buildSearchUrl(subscription, page = 1, propertyType = null) {
   }
   if (subscription.roomCount != null) {
     params.push(["room_min", subscription.roomCount]);
-    params.push(["room_max", subscription.roomCount]);
   }
   if (subscription.propertyType === "HOUSE" && subscription.areaSqm != null) {
     params.push(["space_min", subscription.areaSqm]);
-    params.push(["space_max", subscription.areaSqm]);
   }
   if (subscription.propertyType === "LAND" && subscription.landSot != null) {
     params.push(["space_min", subscription.landSot]);
@@ -136,5 +134,5 @@ export async function fetchListings(subscription) {
   for (const type of types) {
     batches.push(await fetchType(subscription, type));
   }
-  return dedupeListings(batches.flat()).slice(0, config.scraper.maxResultsPerSource);
+  return dedupeListings(batches.flat());
 }

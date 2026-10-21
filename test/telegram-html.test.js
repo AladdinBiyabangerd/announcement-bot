@@ -60,11 +60,13 @@ test("formatConfirmationHtml uses Azerbaijani type and site names", () => {
     maxPrice: 100000,
     sources: "bina,tap,ev10,yeniemlak,emlak",
   });
-  assert.match(html, /Ev \(həyət evi \/ bağ evi\)/);
+  assert.match(html, /Ev \(mənzil \/ həyət evi \/ bağ evi\)/);
   assert.doesNotMatch(html, /HOUSE/);
   assert.match(html, /bina\.az, tap\.az/);
   assert.match(html, /50 000 – 100 000 AZN/);
   assert.match(html, /#2/);
+  assert.match(html, /Sahə: 100 m²\+/);
+  assert.match(html, /Otaq: 3\+/);
 });
 
 test("formatListHtml shows short type labels", () => {
@@ -82,6 +84,8 @@ test("formatListHtml shows short type labels", () => {
   ]);
   assert.match(html, /Ev · Bakı/);
   assert.doesNotMatch(html, /HOUSE/);
+  assert.match(html, /Sahə: 100 m²\+/);
+  assert.match(html, /Otaq: 3\+/);
   assert.match(html, /\/start/);
 });
 

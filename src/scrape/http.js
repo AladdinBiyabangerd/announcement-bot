@@ -122,23 +122,74 @@ async function directFetch(url, extraHeaders = {}) {
   throw lastError;
 }
 
-async function fetchWithFlareSolverr(targetUrl) {
+const FLARE_SESSION = "announcement-bot";
+const FLARE_ATTEMPTS = 3;
+let flareSessionReady = false;
+
+export function resetFlareSolverrSession() {
+  flareSessionReady = false;
+}
+
+export function buildFlareSolverrRequest(targetUrl, { session, proxy } = {}) {
+  const body = {
+    cmd: "request.get",
+    url: targetUrl,
+    maxTimeout: 60_000,
+  };
+  if (session) {
+    body.session = session;
+  }
+  if (proxy) {
+    body.proxy = { url: proxy };
+  }
+  return body;
+}
+
+function isFlareSessionError(message) {
+  const lower = String(message || "").toLowerCase();
+  return lower.includes("session") && (lower.includes("not") || lower.includes("invalid") || lower.includes("exist"));
+}
+
+async function postFlareSolverr(payload) {
   const base = config.scraper.flaresolverrUrl.replace(/\/$/, "");
   const response = await fetch(`${base}/v1`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      cmd: "request.get",
-      url: targetUrl,
-      maxTimeout: 60_000,
-    }),
+    body: JSON.stringify(payload),
     signal: AbortSignal.timeout(90_000),
   });
   if (!response.ok) {
     throw new Error(`FlareSolverr HTTP ${response.status}`);
   }
-  const root = await response.json();
+  return response.json();
+}
+
+async function ensureFlareSession() {
+  if (flareSessionReady) {
+    return FLARE_SESSION;
+  }
+  const root = await postFlareSolverr({ cmd: "sessions.create", session: FLARE_SESSION });
+  const status = String(root.status || "").toLowerCase();
+  const message = String(root.message || "").toLowerCase();
+  if (status === "ok" || message.includes("already")) {
+    flareSessionReady = true;
+    return FLARE_SESSION;
+  }
+  throw new Error(`FlareSolverr session: ${root.message || "unknown error"}`);
+}
+
+async function fetchWithFlareSolverrOnce(targetUrl) {
+  const session = await ensureFlareSession();
+  const root = await postFlareSolverr(
+    buildFlareSolverrRequest(targetUrl, {
+      session,
+      proxy: config.scraper.httpProxy || undefined,
+    }),
+  );
   if (String(root.status || "").toLowerCase() !== "ok") {
+    if (isFlareSessionError(root.message)) {
+      flareSessionReady = false;
+    }
     throw new Error(`FlareSolverr: ${root.message || "unknown error"}`);
   }
   const httpStatus = root.solution?.status ?? 0;
@@ -146,13 +197,42 @@ async function fetchWithFlareSolverr(targetUrl) {
   if (httpStatus < 200 || httpStatus >= 300 || !html) {
     throw new Error(`FlareSolverr returned HTTP ${httpStatus} for ${targetUrl}`);
   }
-  console.log(`FlareSolverr uğurlu: url=${targetUrl} status=${httpStatus}`);
+  if (isCloudflareChallengeBody(html)) {
+    throw new Error("FlareSolverr Cloudflare challenge səhifəsi qayıtdı");
+  }
+  console.log(`FlareSolverr uğurlu: url=${targetUrl} status=${httpStatus} session=${session}`);
   return html;
 }
 
-async function fetchWithBypass(url, original) {
-  const flaresolverrUrl = config.scraper.flaresolverrUrl;
-  if (flaresolverrUrl) {
+async function fetchWithFlareSolverr(targetUrl) {
+  let lastError;
+  for (let attempt = 1; attempt <= FLARE_ATTEMPTS; attempt += 1) {
+    try {
+      return await fetchWithFlareSolverrOnce(targetUrl);
+    } catch (err) {
+      lastError = err;
+      console.warn(
+        `FlareSolverr cəhd ${attempt}/${FLARE_ATTEMPTS} uğursuz: url=${targetUrl}`,
+        err?.message || err,
+      );
+      if (attempt < FLARE_ATTEMPTS) {
+        await new Promise((resolve) => setTimeout(resolve, 800 * attempt));
+      }
+    }
+  }
+  throw lastError;
+}
+
+async function fetchViaProxyFallback(url, extraHeaders = {}) {
+  if (!config.scraper.httpProxy) {
+    return null;
+  }
+  console.warn(`FlareSolverr-dən sonra proxy ilə cəhd: ${url}`);
+  return directFetchOnce(url, extraHeaders);
+}
+
+async function fetchWithBypass(url, original, extraHeaders = {}) {
+  if (config.scraper.flaresolverrUrl) {
     try {
       return await fetchWithFlareSolverr(url);
     } catch (flareEx) {
@@ -162,6 +242,14 @@ async function fetchWithBypass(url, original) {
     console.warn(
       "SCRAPER_FLARESOLVERR_URL təyin edilməyib. Datacenter IP-dən bina.az/tap.az bloklana bilər.",
     );
+  }
+  try {
+    const viaProxy = await fetchViaProxyFallback(url, extraHeaders);
+    if (viaProxy != null) {
+      return viaProxy;
+    }
+  } catch (proxyEx) {
+    console.error(`Proxy fallback uğursuz: url=${url}`, proxyEx);
   }
   throw original;
 }
@@ -181,7 +269,7 @@ export async function fetchHtml(url, extraHeaders = {}) {
   } catch (err) {
     if (err instanceof SourceFetchError && err.cloudflareBlock) {
       console.warn(`Cloudflare blokladı (${err.statusCode}): ${url}`);
-      return fetchWithBypass(url, err);
+      return fetchWithBypass(url, err, extraHeaders);
     }
     throw err;
   }

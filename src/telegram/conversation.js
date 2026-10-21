@@ -161,7 +161,7 @@ function priceKeyboard() {
 function propertyTypeKeyboard() {
   return {
     inline_keyboard: [
-      [{ text: "🏠  Ev (həyət / bağ)", callback_data: "type:house" }],
+      [{ text: "🏠  Ev", callback_data: "type:house" }],
       [{ text: "🌿  Torpaq", callback_data: "type:land" }],
     ],
   };
@@ -177,12 +177,12 @@ function roomsKeyboard() {
   return {
     inline_keyboard: [
       [
-        { text: "1", callback_data: "rooms:1" },
-        { text: "2", callback_data: "rooms:2" },
-        { text: "3", callback_data: "rooms:3" },
+        { text: "1+", callback_data: "rooms:1" },
+        { text: "2+", callback_data: "rooms:2" },
+        { text: "3+", callback_data: "rooms:3" },
       ],
       [
-        { text: "4", callback_data: "rooms:4" },
+        { text: "4+", callback_data: "rooms:4" },
         { text: "5+", callback_data: "rooms:5" },
       ],
       [{ text: "⏭  Keç", callback_data: "rooms:skip" }],
@@ -232,9 +232,9 @@ function promptPropertyType() {
 function promptHouseArea() {
   return [
     "📐 <b>Sahə</b>",
-    "Evin sahəsini m² ilə yazın.",
+    "Minimum sahəni m² ilə yazın.",
     "",
-    "<i>Məsələn: 120</i>",
+    "<i>Məsələn: 100 — 100 m² və daha böyük evlər gələcək.</i>",
     "<i>İstəməsəniz Keç basın.</i>",
   ].join("\n");
 }
@@ -242,9 +242,9 @@ function promptHouseArea() {
 function promptLandArea() {
   return [
     "📐 <b>Sahə</b>",
-    "Torpağın sahəsini sot ilə yazın.",
+    "Minimum torpaq sahəsini sot ilə yazın.",
     "",
-    "<i>Məsələn: 10</i>",
+    "<i>Məsələn: 3 — 3 sot və daha böyük sahələr gələcək.</i>",
     "<i>İstəməsəniz Keç basın.</i>",
   ].join("\n");
 }
@@ -252,7 +252,7 @@ function promptLandArea() {
 function promptRooms() {
   return [
     "🚪 <b>Otaq sayı</b>",
-    "Otaq sayını seçin.",
+    "Minimum otaq sayını seçin (3 seçsəniz, 3 və daha çox otaqlı evlər gələcək).",
     "",
     "<i>İstəməsəniz Keç basın.</i>",
   ].join("\n");
@@ -362,19 +362,22 @@ async function continueAfterLandSot(db, chatId, draft, landSot) {
   await askCity(db, chatId, draft);
 }
 
-async function finishAndSubscribe(db, chatId, draft) {
+export async function finishAndSubscribe(db, chatId, draft, hooks = {}) {
+  const send = hooks.sendHtml ?? sendHtml;
+  const scan = hooks.processSubscription ?? processSubscription;
   const user = findUserByChatId(db, chatId);
   if (!user) {
     throw new Error("İstifadəçi tapılmadı");
   }
   const subscription = createFromDraft(db, user, draft);
-  try {
-    await processSubscription(db, subscription, false);
-  } catch {
-    // ilkin skan uğursuz olsa belə abunəlik aktiv qalır
-  }
   clearSession(db, chatId);
-  await sendHtml(chatId, formatConfirmationHtml(subscription));
+  await send(chatId, formatConfirmationHtml(subscription));
+  void Promise.resolve()
+    .then(() => scan(db, subscription, false))
+    .catch((err) => {
+      console.error(`İlkin skan xətası: subscriptionId=${subscription.id}`, err);
+    });
+  return subscription;
 }
 
 async function handlePropertyType(db, chatId, text, draft) {
@@ -567,7 +570,7 @@ export async function handleFlowCallback(db, chatId, query) {
     if (!Number.isInteger(rooms) || rooms < 1 || rooms > 5) {
       return;
     }
-    await confirmChoice(query, `🚪 Otaq: <b>${rooms === 5 ? "5+" : rooms}</b>`);
+    await confirmChoice(query, `🚪 Otaq: <b>${rooms}+</b>`);
     await continueAfterRooms(db, chatId, draft, rooms);
     return;
   }

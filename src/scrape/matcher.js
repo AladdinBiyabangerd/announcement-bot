@@ -67,7 +67,7 @@ function matchesPropertyKind(listing, subscription) {
 
 function matchesHouse(listing, subscription) {
   if (subscription.areaSqm != null) {
-    if (listing.areaSqm == null || listing.areaSqm !== subscription.areaSqm) {
+    if (listing.areaSqm == null || Number(listing.areaSqm) < subscription.areaSqm) {
       return false;
     }
   }
@@ -75,10 +75,7 @@ function matchesHouse(listing, subscription) {
     if (listing.roomCount == null) {
       return false;
     }
-    if (subscription.roomCount === 5) {
-      return listing.roomCount >= 5;
-    }
-    return listing.roomCount === subscription.roomCount;
+    return Number(listing.roomCount) >= subscription.roomCount;
   }
   return true;
 }
